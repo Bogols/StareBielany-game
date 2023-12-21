@@ -1,9 +1,13 @@
+use crate::components::player::Player;
+use crate::helpers;
 use bevy::prelude::*;
 use bevy::window::PrimaryWindow;
-use crate::components::player::Player;
 
-
-pub fn setup(mut commands: Commands, asset_server: Res<AssetServer>, window_query: Query<&Window, With<PrimaryWindow>>) {
+pub fn setup(
+    mut commands: Commands,
+    asset_server: Res<AssetServer>,
+    window_query: Query<&Window, With<PrimaryWindow>>,
+) {
     let window = window_query.get_single().unwrap();
 
     commands.spawn(Camera2dBundle {
@@ -17,6 +21,13 @@ pub fn setup(mut commands: Commands, asset_server: Res<AssetServer>, window_quer
             transform: Transform::from_xyz(0., 0., 0.),
             ..default()
         },
-        Player {}
+        Player {},
     ));
+
+    let map_handle: Handle<helpers::tiled::TiledMap> = asset_server.load("map.tmx");
+
+    commands.spawn(helpers::tiled::TiledMapBundle {
+        tiled_map: map_handle,
+        ..Default::default()
+    });
 }
