@@ -1,5 +1,5 @@
-use crate::helpers::tiled::TiledMapPlugin;
 use bevy::prelude::*;
+
 use setup::setup;
 use systems::{confine_player_movement, player_movement};
 
@@ -13,7 +13,6 @@ fn main() {
     println!("{:?}", std::env::current_dir());
     App::new()
         .add_plugins(DefaultPlugins.set(ImagePlugin::default_nearest()))
-        .add_plugins(TiledMapPlugin)
         .add_systems(Startup, setup)
         .add_systems(Update, (player_movement, confine_player_movement))
         .add_systems(Update, camera_movement_system)
