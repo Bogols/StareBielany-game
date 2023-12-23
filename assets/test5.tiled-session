@@ -7,6 +7,28 @@
     "expandedProjectPaths": [
     ],
     "fileStates": {
+        "test10.json": {
+            "scale": 1.708,
+            "selectedLayer": 0,
+            "viewCenter": {
+                "x": 181.20608899297423,
+                "y": 180.91334894613584
+            }
+        },
+        "test10.json#test10": {
+            "scaleInDock": 1
+        },
+        "test11.json": {
+            "scale": 0.25,
+            "selectedLayer": 0,
+            "viewCenter": {
+                "x": 1626,
+                "y": 1572
+            }
+        },
+        "test11.json#test11": {
+            "scaleInDock": 1
+        },
         "test6.tmx": {
             "scale": 0.1112,
             "selectedLayer": 1,
@@ -21,10 +43,10 @@
     },
     "last.exportedFilePath": "/Users/wolffo/Documents/workbench/games/stare-bielany-game/assets",
     "last.imagePath": "/Users/wolffo/Documents/workbench/games/stare-bielany-game/assets",
-    "map.height": 100,
+    "map.height": 5,
     "map.lastUsedExportFilter": "JSON map files (*.tmj *.json)",
     "map.lastUsedFormat": "json",
-    "map.width": 100,
+    "map.width": 5,
     "openFiles": [
         "test6.tmx"
     ],
