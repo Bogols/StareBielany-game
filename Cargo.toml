@@ -7,9 +7,5 @@ edition = "2021"
 
 [dependencies]
 bevy = "0.12.1"
-bevy-inspector-egui = "0.21.0"
-bevy_ecs_tilemap = { git = "https://github.com/divark/bevy_ecs_tilemap", branch = "0.12-fixes" }
 serde = "1.0.193"
 serde_json = "1.0.108"
-thiserror = "1.0.51"
-tiled = "0.11.2"

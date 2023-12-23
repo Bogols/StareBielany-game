@@ -1,5 +1,6 @@
 use crate::components::player::Player;
 use crate::helpers::map_loader::{load_map_from_json, Map};
+use crate::resources::constants::{TEXTURE_PATH, TILE_MAP_PATH};
 use bevy::prelude::*;
 use bevy::window::PrimaryWindow;
 
@@ -28,9 +29,9 @@ pub fn setup(
         Player {},
     ));
 
-    let map = load_map_from_json("assets/test15.json");
+    let map = load_map_from_json(TILE_MAP_PATH);
 
-    let texture_handle = asset_server.load("metro-tiles.png");
+    let texture_handle = asset_server.load(TEXTURE_PATH);
     let texture_atlas = create_texture_atlas(texture_handle, &mut texture_atlases, &map);
 
     spawn_tiles(&mut commands, &map, &texture_atlas);

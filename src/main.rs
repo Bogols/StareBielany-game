@@ -10,7 +10,6 @@ mod setup;
 mod systems;
 
 fn main() {
-    println!("{:?}", std::env::current_dir());
     App::new()
         .add_plugins(DefaultPlugins.set(ImagePlugin::default_nearest()))
         .add_systems(Startup, setup)
