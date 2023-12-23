@@ -1,23 +1,23 @@
 use serde::{Deserialize, Serialize};
 
 #[derive(Serialize, Deserialize)]
-struct Map {
-    height: u32,
-    width: u32,
-    layers: Vec<Layer>,
-    infinite: bool,
-    tileheight: u32,
-    tilewidth: u32,
-    tilesets: Vec<Tileset>,
-    version: String,
-    orientation: String,
-    renderorder: String,
+pub struct Map {
+    pub height: u32,
+    pub width: u32,
+    pub layers: Vec<Layer>,
+    pub infinite: bool,
+    pub tileheight: u32,
+    pub tilewidth: u32,
+    pub tilesets: Vec<Tileset>,
+    pub version: String,
+    pub orientation: String,
+    pub renderorder: String,
 }
 
 #[derive(Serialize, Deserialize)]
 
-struct Layer {
-    data: Vec<u32>,
+pub struct Layer {
+    pub data: Vec<u32>,
     height: u32,
     width: u32,
     name: String,
@@ -29,7 +29,7 @@ struct Layer {
 
 #[derive(Serialize, Deserialize)]
 
-struct Tileset {
+pub struct Tileset {
     columns: u32,
     firstgid: u32,
     image: String,
@@ -43,7 +43,7 @@ struct Tileset {
     tilewidth: u32,
 }
 
-fn load_map_from_json(path: &str) -> Map {
+pub fn load_map_from_json(path: &str) -> Map {
     let file_content = std::fs::read_to_string(path).expect("Unable to read file");
     serde_json::from_str(&file_content).expect("Unable to parse json")
 }
