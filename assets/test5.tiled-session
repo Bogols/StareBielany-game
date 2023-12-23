@@ -1,0 +1,36 @@
+{
+    "Map/SizeTest": {
+        "height": 4300,
+        "width": 2
+    },
+    "activeFile": "test6.tmx",
+    "expandedProjectPaths": [
+    ],
+    "fileStates": {
+        "test6.tmx": {
+            "scale": 0.1112,
+            "selectedLayer": 1,
+            "viewCenter": {
+                "x": 4514.388489208634,
+                "y": 3655.5755395683454
+            }
+        },
+        "test6.tmx#metro-tiles": {
+            "scaleInDock": 1
+        }
+    },
+    "last.exportedFilePath": "/Users/wolffo/Documents/workbench/games/stare-bielany-game/assets",
+    "last.imagePath": "/Users/wolffo/Documents/workbench/games/stare-bielany-game/assets",
+    "map.height": 100,
+    "map.lastUsedExportFilter": "JSON map files (*.tmj *.json)",
+    "map.lastUsedFormat": "json",
+    "map.width": 100,
+    "openFiles": [
+        "test6.tmx"
+    ],
+    "project": "test5.tiled-project",
+    "recentFiles": [
+        "test6.tmx"
+    ],
+    "tileset.embedInMap": true
+}
