@@ -1,7 +1,6 @@
 use std::io::{Cursor, ErrorKind};
 use std::path::Path;
 use std::sync::Arc;
-use tiled;
 
 use bevy::{
     asset::{io::Reader, AssetLoader, AssetPath, AsyncReadExt},
@@ -35,12 +34,9 @@ pub struct TiledMap {
 
     pub tilemap_textures: HashMap<usize, TilemapTexture>,
 
-    // The offset into the tileset_images for each tile id within each tileset.
-    #[cfg(not(feature = "atlas"))]
     pub tile_image_offsets: HashMap<(usize, tiled::TileId), u32>,
 }
 
-// Stores a list of tiled layers.
 #[derive(Component, Default)]
 pub struct TiledLayersStorage {
     pub storage: HashMap<u32, Entity>,
@@ -71,7 +67,6 @@ impl tiled::ResourceReader for BytesResourceReader {
     type Error = std::io::Error;
 
     fn read_from(&mut self, _path: &Path) -> std::result::Result<Self::Resource, Self::Error> {
-        // In this case, the path is ignored because the byte data is already provided.
         Ok(Cursor::new(self.bytes.clone()))
     }
 }
@@ -80,7 +75,6 @@ pub struct TiledLoader;
 
 #[derive(Debug, Error)]
 pub enum TiledAssetLoaderError {
-    /// An [IO](std::io) Error
     #[error("Could not load Tiled file: {0}")]
     Io(#[from] std::io::Error),
 }
@@ -110,67 +104,46 @@ impl AssetLoader for TiledLoader {
 
             let mut dependencies = Vec::new();
             let mut tilemap_textures = HashMap::default();
-            #[cfg(not(feature = "atlas"))]
             let mut tile_image_offsets = HashMap::default();
 
             for (tileset_index, tileset) in map.tilesets().iter().enumerate() {
-                let tilemap_texture = match &tileset.image {
-                    None => {
-                        #[cfg(feature = "atlas")]
-                        {
-                            log::info!("Skipping image collection tileset '{}' which is incompatible with atlas feature", tileset.name);
-                            continue;
-                        }
+                if let Some(img) = &tileset.image {
+                    let tmx_dir = load_context
+                        .path()
+                        .parent()
+                        .expect("The asset load context was empty.");
+                    let tile_path = tmx_dir.join(&img.source);
+                    let asset_path = AssetPath::from(tile_path);
+                    let texture: Handle<Image> = load_context.load(asset_path.clone());
+                    dependencies.push(asset_path);
 
-                        #[cfg(not(feature = "atlas"))]
-                        {
-                            let mut tile_images: Vec<Handle<Image>> = Vec::new();
-                            for (tile_id, tile) in tileset.tiles() {
-                                if let Some(img) = &tile.image {
-                                    // The load context path is the TMX file itself. If the file is at the root of the
-                                    // assets/ directory structure then the tmx_dir will be empty, which is fine.
-                                    let tmx_dir = load_context
-                                        .path()
-                                        .parent()
-                                        .expect("The asset load context was empty.");
-                                    let tile_path = tmx_dir.join(&img.source);
-                                    let asset_path = AssetPath::from(tile_path);
-                                    log::info!("Loading tile image from {asset_path:?} as image ({tileset_index}, {tile_id})");
-                                    let texture: Handle<Image> =
-                                        load_context.load(asset_path.clone());
-                                    tile_image_offsets
-                                        .insert((tileset_index, tile_id), tile_images.len() as u32);
-                                    tile_images.push(texture.clone());
-                                    dependencies.push(asset_path);
-                                }
-                            }
-
-                            TilemapTexture::Vector(tile_images)
+                    tilemap_textures.insert(tileset_index, TilemapTexture::Single(texture.clone()));
+                } else {
+                    let mut tile_images: Vec<Handle<Image>> = Vec::new();
+                    for (tile_id, tile) in tileset.tiles() {
+                        if let Some(img) = &tile.image {
+                            let tmx_dir = load_context
+                                .path()
+                                .parent()
+                                .expect("The asset load context was empty.");
+                            let tile_path = tmx_dir.join(&img.source);
+                            let asset_path = AssetPath::from(tile_path);
+                            log::info!("Loading tile image from {asset_path:?} as image ({tileset_index}, {tile_id})");
+                            let texture: Handle<Image> = load_context.load(asset_path.clone());
+                            tile_image_offsets
+                                .insert((tileset_index, tile_id), tile_images.len() as u32);
+                            tile_images.push(texture.clone());
+                            dependencies.push(asset_path);
                         }
                     }
-                    Some(img) => {
-                        // The load context path is the TMX file itself. If the file is at the root of the
-                        // assets/ directory structure then the tmx_dir will be empty, which is fine.
-                        let tmx_dir = load_context
-                            .path()
-                            .parent()
-                            .expect("The asset load context was empty.");
-                        let tile_path = tmx_dir.join(&img.source);
-                        let asset_path = AssetPath::from(tile_path);
-                        let texture: Handle<Image> = load_context.load(asset_path.clone());
-                        dependencies.push(asset_path);
 
-                        TilemapTexture::Single(texture.clone())
-                    }
-                };
-
-                tilemap_textures.insert(tileset_index, tilemap_texture);
+                    tilemap_textures.insert(tileset_index, TilemapTexture::Vector(tile_images));
+                }
             }
 
             let asset_map = TiledMap {
                 map,
                 tilemap_textures,
-                #[cfg(not(feature = "atlas"))]
                 tile_image_offsets,
             };
 
@@ -329,20 +302,32 @@ pub fn process_loaded_maps(
                                             continue;
                                         }
                                     };
-
                                 let texture_index = match tilemap_texture {
-                                    TilemapTexture::Single(_) => layer_tile.id(),
-                                    #[cfg(not(feature = "atlas"))]
-                                    TilemapTexture::Vector(_) =>
-                                        *tiled_map.tile_image_offsets.get(&(tileset_index, layer_tile.id()))
-                                            .expect("The offset into to image vector should have been saved during the initial load."),
-                                    #[cfg(not(feature = "atlas"))]
-                                    _ => unreachable!()
-                                };
+                                        TilemapTexture::Single(_) => layer_tile.id(),
+                                        TilemapTexture::Vector(_) => {
+                                            *tiled_map.tile_image_offsets.get(&(tileset_index, layer_tile.id()))
+                                                .expect("The offset into the image vector should have been saved during the initial load.")
+                                        },
+                                        TilemapTexture::TextureContainer(_) => {
+                                            // Handle the TextureContainer case here.
+                                            // You will need to decide how to get the texture_index based on your use case.
+                                            // For example, if TextureContainer behaves similarly to Vector, you might need a similar approach.
+                                            // Or if it's a different logic, implement that here.
+                                            unimplemented!("TextureContainer handling not implemented")
+                                        }
+                                        // Add any other variants here with appropriate handling.
+                                    };
 
                                 let tile_pos = TilePos { x, y };
                                 let tile_entity = commands
                                     .spawn(TileBundle {
+                                        color: TileColor(bevy::render::color::Color::Rgba {
+                                            // debug purposes
+                                            red: 225.00,
+                                            green: 0.00,
+                                            blue: 0.00,
+                                            alpha: 1.00,
+                                        }),
                                         position: tile_pos,
                                         tilemap_id: TilemapId(layer_entity),
                                         texture_index: TileTextureIndex(texture_index),
@@ -365,13 +350,19 @@ pub fn process_loaded_maps(
                             texture: tilemap_texture.clone(),
                             tile_size,
                             spacing: tile_spacing,
-                            transform: get_tilemap_center_transform(
-                                &map_size,
-                                &grid_size,
-                                &map_type,
-                                layer_index as f32,
-                            ) * Transform::from_xyz(offset_x, -offset_y, 0.0),
-                            map_type,
+                            transform: {
+                                let transform = get_tilemap_center_transform(
+                                    &map_size,
+                                    &grid_size,
+                                    &map_type,
+                                    layer_index as f32,
+                                ) * Transform::from_xyz(offset_x, -offset_y, 0.0);
+
+                                println!("Transform: {:?}", transform);
+                                println!("map size: {:?}", &map_size);
+
+                                transform
+                            },
                             ..Default::default()
                         });
 
