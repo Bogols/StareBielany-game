@@ -1,12 +1,11 @@
-use bevy::prelude::*;
 use crate::components::player::Player;
 use crate::resources::constants::PLAYER_SPEED;
-
+use bevy::prelude::*;
 
 pub fn player_movement(
     keyboard_input: Res<Input<KeyCode>>,
     time: Res<Time>,
-    mut sprite_position_query: Query<&mut Transform, With<Player>>
+    mut sprite_position_query: Query<&mut Transform, With<Player>>,
 ) {
     if let Ok(mut transform) = sprite_position_query.get_single_mut() {
         let mut direction = Vec3::ZERO;
@@ -31,4 +30,3 @@ pub fn player_movement(
         transform.translation += direction * PLAYER_SPEED * time.delta_seconds();
     }
 }
-
