@@ -30,17 +30,17 @@ pub struct Layer {
 #[derive(Serialize, Deserialize)]
 
 pub struct Tileset {
-    columns: u32,
-    firstgid: u32,
-    image: String,
-    imageheight: u32,
-    imagewidth: u32,
-    margin: u32,
-    name: String,
-    spacing: u32,
-    tilecount: u32,
-    tileheight: u32,
-    tilewidth: u32,
+    pub columns: u32,
+    pub firstgid: u32,
+    pub image: String,
+    pub imageheight: u32,
+    pub imagewidth: u32,
+    pub margin: u32,
+    pub name: String,
+    pub spacing: u32,
+    pub tilecount: u32,
+    pub tileheight: u32,
+    pub tilewidth: u32,
 }
 
 pub fn load_map_from_json(path: &str) -> Map {
