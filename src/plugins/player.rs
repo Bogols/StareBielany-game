@@ -126,8 +126,6 @@ pub fn player_movement(
         ];
 
         for (key, vec, anim) in directions.iter() {
-            println!("key: {:?}, vec: {:?}, anim: {:?}", key, vec, anim);
-
             if keyboard_input.pressed(*key) {
                 direction += *vec;
                 current_animation = *anim;
