@@ -78,6 +78,7 @@ fn player_setup(
             transform: Transform::from_scale(Vec3::splat(10.0)),
             ..Default::default()
         })
+        .insert(player_animations.idle.clone())
         .insert(player_animations)
         .insert(AnimationState::default())
         .insert(Player {});
