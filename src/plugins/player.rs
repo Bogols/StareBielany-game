@@ -97,8 +97,13 @@ pub fn player_movement(
         With<Player>,
     >,
 ) {
-    if let Ok((mut transform, mut state, mut animation, player_animations)) = query.get_single_mut()
-    {
+    println!("Player movement system entered"); // Confirm the system is running
+    let mut entity_count = 0;
+
+    for (mut transform, mut state, mut animation, player_animations) in query.iter_mut() {
+        println!("Entity found, processing..."); // This should print for each matching entity
+        entity_count += 1;
+
         let mut direction = Vec3::ZERO;
         let mut current_animation = PlayerAnimation::Idle;
 
@@ -151,8 +156,10 @@ pub fn player_movement(
             *animation = new_animation.clone();
         }
 
+        println!("animation: {:?}", animation);
         state.update(&animation.0, time.delta());
     }
+    println!("Total entities processed: {}", entity_count); // How many entities were iterated over
 }
 
 pub fn confine_player_movement(
