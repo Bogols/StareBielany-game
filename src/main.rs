@@ -1,19 +1,19 @@
-use bevy::prelude::*;
-
-use setup::setup;
-use systems::{confine_player_movement, player_movement};
-
 mod components;
 mod helpers;
+mod plugins;
 mod resources;
 mod setup;
 mod systems;
+
+use bevy::prelude::*;
+use plugins::player::PlayerPlugin;
+use setup::setup;
 
 fn main() {
     App::new()
         .add_plugins(DefaultPlugins.set(ImagePlugin::default_nearest()))
         .add_systems(Startup, setup)
-        .add_systems(Update, (player_movement, confine_player_movement))
+        .add_plugins(PlayerPlugin)
         .add_systems(Update, camera_movement_system)
         // .add_systems(Update, print_camera_position)
         .run();
