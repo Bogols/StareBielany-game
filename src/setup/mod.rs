@@ -1,4 +1,3 @@
-use crate::components::player::Player;
 use crate::helpers::map_loader::{load_map_from_json, Map};
 use crate::resources::constants::{TEXTURE_PATH, TILE_MAP_PATH};
 use bevy::prelude::*;
