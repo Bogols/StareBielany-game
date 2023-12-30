@@ -5,7 +5,7 @@ use bevy::{prelude::*, window::PrimaryWindow};
 #[derive(Component)]
 pub struct Player;
 
-#[derive(Component, Deref, Clone)]
+#[derive(Component, Deref, Clone, Debug)]
 pub struct Animation(pub benimator::Animation);
 
 #[derive(Default, Component, Deref, DerefMut)]
