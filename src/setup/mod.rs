@@ -15,18 +15,14 @@ pub fn setup(
     let window = window_query.get_single().unwrap();
 
     commands.spawn(Camera2dBundle {
-        transform: Transform::from_xyz(window.width() / 2.0, window.height() / 2.0, 20.0),
+        transform: Transform::from_xyz(window.width() / 2.0, window.height() / 2.0, 20.0)
+            .with_scale(Vec3 {
+                x: 10.,
+                y: 10.,
+                z: 10.,
+            }),
         ..default()
     });
-
-    commands.spawn((
-        SpriteBundle {
-            texture: asset_server.load("brand64.png"),
-            transform: Transform::from_xyz(0., 0., 0.),
-            ..default()
-        },
-        Player {},
-    ));
 
     let map = load_map_from_json(TILE_MAP_PATH);
 
