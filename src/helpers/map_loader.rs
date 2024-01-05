@@ -43,7 +43,13 @@ pub struct Tileset {
     pub tilewidth: u32,
 }
 
+/*
+
+MIGTH BE USEFUL LATER
+
 pub fn load_map_from_json(path: &str) -> Map {
     let file_content = std::fs::read_to_string(path).expect("Unable to read file");
     serde_json::from_str(&file_content).expect("Unable to parse json")
 }
+
+*/
