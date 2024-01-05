@@ -1,13 +1,13 @@
 use benimator::FrameRate;
-use bevy::prelude::*;
+use bevy::{prelude::*, window::PrimaryWindow};
 use bevy_rapier2d::prelude::*;
+use rand::prelude::*;
 
-use crate::components::bullet::Bullet;
-use crate::components::pickup::Pickup;
-use crate::components::player::Player;
-use crate::plugins::bullet::BulletSpawnTimer;
-use crate::plugins::cursor_position::CursorPosition;
 use crate::resources::constants::PLAYER_SPEED;
+use crate::setup::MainCamera;
+
+#[derive(Component)]
+pub struct Player;
 
 #[derive(Component, Deref, Clone, Debug)]
 pub struct Animation(pub benimator::Animation);
@@ -33,24 +33,109 @@ enum PlayerAnimation {
     RunningDown,
 }
 
+#[derive(Default, Resource)]
+struct CursorPosition(Vec2);
+
+#[derive(Component)]
+struct Bullet {
+    velocity: Vec2,
+}
+
+#[derive(Component)]
+pub struct Pickup;
+
 pub struct PlayerPlugin;
+
+pub struct Health {
+    current: i32,
+    max: i32,
+}
+
+impl Health {
+    fn new(max: i32) -> Self {
+        Health { current: max, max }
+    }
+}
+
+#[derive(Component)]
+pub struct Enemy {
+    health: Health,
+}
+
+impl Enemy {
+    fn new(max_health: i32) -> Self {
+        Enemy { health: Health::new(max_health) }
+    }
+
+    fn take_damage(&mut self, amount: i32) {
+        self.health.current = (self.health.current - amount).max(0);
+    }
+}
 
 impl Plugin for PlayerPlugin {
     fn build(&self, app: &mut App) {
         app
+            .insert_resource(RapierConfiguration {
+                gravity: Vec2::ZERO,
+                ..default()
+            })
+            .insert_resource(CursorPosition(Vec2::ZERO))
+            .add_plugins(RapierDebugRenderPlugin::default())
+            .add_plugins(RapierPhysicsPlugin::<NoUserData>::pixels_per_meter(100.))
             .add_systems(Startup, player_setup)
+            .add_systems(Startup, spawn_mob)
+            .add_systems(Startup, spawn_wall)
+            .add_systems(Startup, spawn_pickups)
+            .add_systems(Update, set_cursor_position)
             .add_systems(Update, player_movement)
             .add_systems(Update, animate)
-            .add_systems(Update, listen_player_controller)
-            .add_systems(Update, spawn_bullets_on_pressed)
+            .add_systems(Update, display_events)
+            .add_systems(Update, print_entity_movement)
+            .add_systems(Update, spawn_bullet_on_click)
+            .add_systems(Update, move_bullets)
         ;
     }
 }
 
-fn listen_player_controller(
+pub fn set_cursor_position(
+    mut cursor_position: ResMut<CursorPosition>,
+    window_query: Query<&Window, With<PrimaryWindow>>,
+    camera_query: Query<(&Camera, &GlobalTransform), With<MainCamera>>,
+) {
+    let (camera, camera_transform) = camera_query.single();
+    let window = window_query.single();
+
+    if let Some(world_position) = window.cursor_position()
+        .and_then(|cursor| camera.viewport_to_world(camera_transform, cursor))
+        .map(|ray| ray.origin.truncate()) {
+        cursor_position.0 = world_position;
+    }
+}
+
+fn display_events(
+    mut collision_events: EventReader<CollisionEvent>,
+    mut contact_force_events: EventReader<ContactForceEvent>,
+) {
+    for collision_event in collision_events.read() {
+        info!(
+            "Received collision event: {:?}",
+            collision_event
+        );
+    }
+
+    for contact_force_event in contact_force_events.read() {
+        info!(
+            "Received contact force event: {:?}",
+            contact_force_event
+        );
+    }
+}
+
+fn print_entity_movement(
     controllers: Query<(Entity, &KinematicCharacterControllerOutput)>,
     mut commands: Commands,
     pickups: Query<&Pickup>,
+    mut enemies: Query<(Entity, &mut Enemy)>,
 ) {
     for (entity, output) in controllers.iter() {
         if !output.collisions.is_empty() {
@@ -61,39 +146,108 @@ fn listen_player_controller(
                     info!("Entity {:?} collided with a Pickup", entity);
                     commands.entity(collided_entity).despawn();
                 }
+
+                if let Ok((enemy_entity, mut enemy)) = enemies.get_mut(collided_entity) {
+                    enemy.take_damage(10);
+                    info!("Entity {:?} collided with an Enemy. HP: {:?}/{:?}", entity, enemy.health.current, enemy.health.max);
+
+                    if enemy.health.current == 0 {
+                        commands.entity(enemy_entity).despawn();
+                        info!("Enemy is dead.");
+                    }
+                }
             }
+
+            // info!(
+            //     "Entity {:?} moved by {:?} and touches the ground: {:?}, collisions: {:?}",
+            //     entity,
+            //     output.effective_translation,
+            //     output.grounded,
+            //     output.collisions
+            // );
         }
     }
 }
 
-fn spawn_bullets_on_pressed(
+fn spawn_bullet_on_click(
     mut commands: Commands,
     mouse_button_input: Res<Input<MouseButton>>,
     cursor_position: Res<CursorPosition>,
-    query: Query<&Transform, With<Player>>,
-    mut bullet_spawn_timer: ResMut<BulletSpawnTimer>,
-    time: Res<Time>,
+    mut query: Query<&Transform, With<Player>>,
 ) {
-    if mouse_button_input.pressed(MouseButton::Left) {
-        if bullet_spawn_timer.0.tick(time.delta()).just_finished() {
-            if let Ok(player_transform) = query.get_single() {
-                let player_position = player_transform.translation.truncate();
-                let bullet_direction = cursor_position.0 - player_position;
-                let bullet_velocity = bullet_direction.normalize_or_zero() * 1000.0;
-                let bullet_angle = bullet_direction.y.atan2(bullet_direction.x) + std::f32::consts::FRAC_PI_2;
+    if mouse_button_input.just_pressed(MouseButton::Left) {
+        if let Ok(player_transform) = query.get_single_mut() {
+            let player_position = player_transform.translation.truncate();
+            let bullet_direction = cursor_position.0 - player_position; // Załóż, że masz `player_position`
+            let bullet_velocity = bullet_direction.normalize() * 10000.0; // Przykładowa prędkość
 
-                commands.spawn(Collider::capsule_y(5., 1.5))
-                    .insert(LockedAxes::ROTATION_LOCKED)
-                    .insert(Bullet {
-                        velocity: bullet_velocity,
-                        lifetime: Timer::from_seconds(1.0, TimerMode::Once),
-                    })
-                    .insert(TransformBundle::from(Transform::from_xyz(player_position.x, player_position.y, 0.)
-                        .with_rotation(Quat::from_rotation_z(bullet_angle))
-                    ));
-            }
+            commands.spawn(Collider::capsule_y(50., 15.))
+                .insert(LockedAxes::ROTATION_LOCKED)
+                .insert(Bullet { velocity: bullet_velocity })
+                .insert(TransformBundle::from(Transform::from_xyz(player_position.x, player_position.y, 0.)))
+            ;
         }
     }
+}
+
+fn move_bullets(
+    time: Res<Time>,
+    mut query: Query<(&mut Transform, &Bullet)>,
+) {
+    for (mut transform, bullet) in query.iter_mut() {
+        transform.translation += bullet.velocity.extend(0.0) * time.delta_seconds();
+    }
+}
+
+fn spawn_pickups(
+    mut commands: Commands
+) {
+    let mut rng = thread_rng(); // Generator liczb losowych
+
+    for _ in 0..10 {
+        let x = rng.gen_range(-2000.0..2500.0); // Losowa pozycja X
+        let y = rng.gen_range(-2000.0..2500.0); // Losowa pozycja Y
+
+        commands
+            .spawn((
+                Transform::from_xyz(x, y, 0.),
+                GlobalTransform::default(),
+            ))
+            .insert(Collider::capsule_y(200., 120.))
+            .insert(ActiveEvents::COLLISION_EVENTS)
+            .insert(Sensor)
+            .insert(Pickup)
+            .insert(Name::new("pickup"));
+    }
+}
+
+fn spawn_wall(
+    mut commands: Commands
+) {
+    commands
+        .spawn((
+            TransformBundle::from(Transform::from_xyz(-1500., 100., 0.)),
+            Collider::cuboid(50., 1500.),
+            ActiveEvents::COLLISION_EVENTS
+        ))
+        .insert(Name::new("wall"))
+    ;
+}
+
+fn spawn_mob(
+    mut commands: Commands
+) {
+    commands
+        .spawn((
+            RigidBody::Dynamic,
+            Collider::ball(250.),
+            ColliderMassProperties::Density(10.),
+            TransformBundle::from(Transform::from_xyz(100., 100., 0.)),
+            ActiveEvents::COLLISION_EVENTS
+        ))
+        .insert(Enemy::new(100))
+        .insert(Name::new("mob"))
+    ;
 }
 
 fn player_setup(
@@ -145,17 +299,14 @@ fn player_setup(
         })
         .insert(SpriteSheetBundle {
             texture_atlas: texture_atlas_handle,
-            transform: Transform::from_scale(Vec3 {
-                x: 0.7,
-                y: 0.7,
-                z: 5.0,
-            }),
+            transform: Transform::from_scale(Vec3::splat(10.0)),
             ..Default::default()
         })
         .insert(player_animations.idle.clone())
         .insert(player_animations)
         .insert(AnimationState::default())
         .insert(Player)
+        .insert(Name::new("player"))
     ;
 }
 
