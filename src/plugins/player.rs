@@ -44,6 +44,9 @@ struct Bullet {
 #[derive(Component)]
 pub struct Pickup;
 
+#[derive(Component)]
+pub struct Wall;
+
 pub struct PlayerPlugin;
 
 pub struct Health {
@@ -117,48 +120,110 @@ fn display_events(
     mut collision_events: EventReader<CollisionEvent>,
     bullet_query: Query<Entity, With<Bullet>>,
     mut enemy_query: Query<(Entity, &mut Enemy)>,
+    wall_query: Query<Entity, With<Wall>>,
 ) {
     for collision_event in collision_events.iter() {
-        if let CollisionEvent::Started(entity1, entity2, _) = collision_event {
-            handle_bullet_enemy_collision(&mut commands, entity1, entity2, &bullet_query, &mut enemy_query);
-            handle_bullet_enemy_collision(&mut commands, entity2, entity1, &bullet_query, &mut enemy_query);
+        match collision_event {
+            CollisionEvent::Started(entity1, entity2, _) => {
+                handle_bullet_collision(
+                    &mut commands,
+                    entity1,
+                    entity2,
+                    &bullet_query,
+                    &mut enemy_query,
+                    &wall_query,
+                );
+            }
+            _ => {}
         }
+
+        info!("Received collision event: {:?}", collision_event);
     }
 }
 
-fn handle_bullet_enemy_collision(
+
+fn handle_bullet_collision(
     commands: &mut Commands,
     entity1: &Entity,
     entity2: &Entity,
     bullet_query: &Query<Entity, With<Bullet>>,
     enemy_query: &mut Query<(Entity, &mut Enemy)>,
+    wall_query: &Query<Entity, With<Wall>>,
 ) {
-    let (bullet_entity, enemy_entity, mut enemy) = match (bullet_query.get(*entity1), enemy_query.get_mut(*entity2)) {
-        (Ok(_), Ok((_entity, enemy))) => (entity1, entity2, enemy),
-        (Ok(_), Err(_)) => return, // Pierwsza encja to Bullet, ale druga nie jest Enemy
-        (_, Ok((_entity, enemy))) => (entity2, entity1, enemy),
-        _ => return, // Brak kolizji między Bullet a Enemy
-    };
+    if let Ok(bullet_entity) = get_bullet_entity(entity1, entity2, bullet_query) {
+        if process_bullet_enemy_collision(bullet_entity, entity1, entity2, commands, enemy_query)
+            || process_bullet_wall_collision(bullet_entity, entity1, entity2, commands, wall_query) {
+            return;
+        }
+    }
+    info!("No relevant bullet collision detected.");
+}
 
-    // Odebranie obrażeń przez przeciwnika i usunięcie pocisku
-    enemy.take_damage(10);
-    info!("Enemy hit! Remaining HP: {}", enemy.health.current);
-    commands.entity(*bullet_entity).despawn();
-    info!("Bullet despawned upon hitting an enemy.");
-
-    // Sprawdzenie, czy przeciwnik jest martwy
-    if enemy.health.current == 0 {
-        commands.entity(*enemy_entity).despawn();
-        info!("Enemy is dead.");
+fn get_bullet_entity<'a>(
+    entity1: &'a Entity,
+    entity2: &'a Entity,
+    bullet_query: &'a Query<Entity, With<Bullet>>,
+) -> Result<&'a Entity, ()> {
+    if bullet_query.get(*entity1).is_ok() {
+        Ok(entity1)
+    } else if bullet_query.get(*entity2).is_ok() {
+        Ok(entity2)
+    } else {
+        Err(())
     }
 }
 
+fn process_bullet_enemy_collision(
+    bullet_entity: &Entity,
+    entity1: &Entity,
+    entity2: &Entity,
+    commands: &mut Commands,
+    enemy_query: &mut Query<(Entity, &mut Enemy)>,
+) -> bool {
+    let (bullet, enemy) = if enemy_query.get_mut(*entity1).is_ok() {
+        (bullet_entity, entity1)
+    } else if enemy_query.get_mut(*entity2).is_ok() {
+        (bullet_entity, entity2)
+    } else {
+        return false;
+    };
+
+    // Odebranie obrażeń przez przeciwnika i usunięcie pocisku
+    if let Ok((enemy_entity, mut enemy)) = enemy_query.get_mut(*enemy) {
+        enemy.take_damage(10);
+        commands.entity(*bullet).despawn();
+        info!("Enemy hit! Remaining HP: {}", enemy.health.current);
+
+        if enemy.health.current == 0 {
+            commands.entity(enemy_entity).despawn();
+            info!("Enemy is dead.");
+        }
+        true
+    } else {
+        false
+    }
+}
+
+fn process_bullet_wall_collision(
+    bullet_entity: &Entity,
+    entity1: &Entity,
+    entity2: &Entity,
+    commands: &mut Commands,
+    wall_query: &Query<Entity, With<Wall>>,
+) -> bool {
+    if wall_query.get(*entity1).is_ok() || wall_query.get(*entity2).is_ok() {
+        commands.entity(*bullet_entity).despawn();
+        info!("Bullet despawned upon hitting a wall.");
+        true
+    } else {
+        false
+    }
+}
 
 fn print_entity_movement(
     controllers: Query<(Entity, &KinematicCharacterControllerOutput)>,
     mut commands: Commands,
-    pickups: Query<&Pickup>,
-    mut enemies: Query<(Entity, &mut Enemy)>,
+    pickups: Query<&Pickup>
 ) {
     for (entity, output) in controllers.iter() {
         if !output.collisions.is_empty() {
@@ -233,12 +298,18 @@ fn spawn_pickups(
 fn spawn_wall(
     mut commands: Commands
 ) {
+    /*
+    * @TODO: Wall a bit hacked by rapier collisions, but working properly?
+    */
     commands
         .spawn((
             TransformBundle::from(Transform::from_xyz(-1500., 100., 0.)),
             Collider::cuboid(50., 1500.),
-            ActiveEvents::COLLISION_EVENTS
+            RigidBody::Dynamic,
+            ActiveEvents::COLLISION_EVENTS,
+            Sensor
         ))
+        .insert(Wall)
         .insert(Name::new("wall"))
     ;
 }
