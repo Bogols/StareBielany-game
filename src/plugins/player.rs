@@ -2,6 +2,7 @@ use benimator::FrameRate;
 use bevy::{prelude::*, window::PrimaryWindow};
 use bevy_rapier2d::prelude::*;
 use rand::prelude::*;
+use bevy::ecs::system::ParamSet;
 
 use crate::resources::constants::PLAYER_SPEED;
 use crate::setup::MainCamera;
@@ -39,7 +40,7 @@ struct CursorPosition(Vec2);
 #[derive(Component)]
 struct Bullet {
     velocity: Vec2,
-    lifetime: Timer
+    lifetime: Timer,
 }
 
 #[derive(Default, Resource)]
@@ -67,11 +68,18 @@ impl Health {
 #[derive(Component)]
 pub struct Enemy {
     health: Health,
+    speed: f32,
 }
 
+#[derive(Component)]
+struct EnemyTimer(Timer);
+
 impl Enemy {
-    fn new(max_health: i32) -> Self {
-        Enemy { health: Health::new(max_health) }
+    fn new(max_health: i32, speed: f32) -> Self {
+        Enemy {
+            health: Health::new(max_health),
+            speed,
+        }
     }
 
     fn take_damage(&mut self, amount: i32) {
@@ -91,7 +99,7 @@ impl Plugin for PlayerPlugin {
             .add_plugins(RapierDebugRenderPlugin::default())
             .add_plugins(RapierPhysicsPlugin::<NoUserData>::pixels_per_meter(100.))
             .add_systems(Startup, player_setup)
-            .add_systems(Startup, spawn_mob)
+            .add_systems(Startup, spawn_enemy)
             .add_systems(Startup, spawn_wall)
             .add_systems(Startup, spawn_pickups)
             .add_systems(Update, set_cursor_position)
@@ -102,6 +110,8 @@ impl Plugin for PlayerPlugin {
             .add_systems(Update, spawn_bullet_on_click)
             .add_systems(Update, despawn_expired_bullets)
             .add_systems(Update, move_bullets)
+            .add_systems(Update, move_enemies)
+            .add_systems(Update, chase_player)
         ;
     }
 }
@@ -146,7 +156,6 @@ fn display_events(
         info!("Received collision event: {:?}", collision_event);
     }
 }
-
 
 fn handle_bullet_collision(
     commands: &mut Commands,
@@ -229,7 +238,7 @@ fn process_bullet_wall_collision(
 fn print_entity_movement(
     controllers: Query<(Entity, &KinematicCharacterControllerOutput)>,
     mut commands: Commands,
-    pickups: Query<&Pickup>
+    pickups: Query<&Pickup>,
 ) {
     for (entity, output) in controllers.iter() {
         if !output.collisions.is_empty() {
@@ -251,7 +260,7 @@ fn spawn_bullet_on_click(
     cursor_position: Res<CursorPosition>,
     query: Query<&Transform, With<Player>>,
     mut bullet_spawn_timer: ResMut<BulletSpawnTimer>,
-    time: Res<Time>
+    time: Res<Time>,
 ) {
     if mouse_button_input.pressed(MouseButton::Left) {
         if bullet_spawn_timer.0.tick(time.delta()).just_finished() {
@@ -265,7 +274,7 @@ fn spawn_bullet_on_click(
                     .insert(LockedAxes::ROTATION_LOCKED)
                     .insert(Bullet {
                         velocity: bullet_velocity,
-                        lifetime: Timer::from_seconds(0.5, TimerMode::Once)
+                        lifetime: Timer::from_seconds(1.0, TimerMode::Once),
                     })
                     .insert(TransformBundle::from(Transform::from_xyz(player_position.x, player_position.y, 0.)
                         .with_rotation(Quat::from_rotation_z(bullet_angle))
@@ -323,6 +332,7 @@ fn spawn_wall(
 ) {
     /*
     * @TODO: Wall a bit hacked by rapier collisions, but working properly?
+    *   It's not. Enemy has an ability to "walk" through the wall.
     */
     commands
         .spawn((
@@ -337,19 +347,69 @@ fn spawn_wall(
     ;
 }
 
-fn spawn_mob(
+fn spawn_enemy(
     mut commands: Commands
 ) {
-    commands
-        .spawn((
-            RigidBody::Dynamic,
-            Collider::ball(250.),
-            TransformBundle::from(Transform::from_xyz(100., 100., 0.)),
-            ActiveEvents::COLLISION_EVENTS
-        ))
-        .insert(Enemy::new(100))
-        .insert(Name::new("mob"))
-    ;
+    let mut rng = thread_rng(); // Generator liczb losowych
+
+    for _ in 0..10 {
+        let x = rng.gen_range(-2000.0..2500.0); // Losowa pozycja X
+        let y = rng.gen_range(-2000.0..2500.0); // Losowa pozycja Y
+
+        commands
+            .spawn((
+                RigidBody::Dynamic,
+                Collider::ball(250.),
+                TransformBundle::from(Transform::from_xyz(x, y, 0.)),
+                ActiveEvents::COLLISION_EVENTS
+            ))
+            .insert(Enemy::new(100, 1500.0))
+            .insert(EnemyTimer(Timer::from_seconds(1.0, TimerMode::Repeating)))
+        ;
+    }
+}
+
+fn chase_player(
+    time: Res<Time>,
+    mut query_set: ParamSet<(
+        Query<&Transform, With<Player>>,
+        Query<(&Enemy, &mut Transform)>
+    )>,
+) {
+    // Najpierw zbieramy informacje o położeniu gracza
+    let player_position = query_set.p0().get_single().map(|t| t.translation);
+
+    // Następnie iterujemy przez przeciwników
+    if let Ok(player_translation) = player_position {
+        for (enemy, mut enemy_transform) in query_set.p1().iter_mut() {
+            let direction_to_player = player_translation - enemy_transform.translation;
+            let distance_to_player = direction_to_player.length();
+
+            if distance_to_player < 5000.0 {
+                let direction_normalized = direction_to_player.normalize_or_zero();
+                enemy_transform.translation += direction_normalized * time.delta_seconds() * enemy.speed;
+            }
+        }
+    }
+}
+
+fn move_enemies(
+    time: Res<Time>,
+    mut query: Query<(&mut Transform, &Enemy, &mut EnemyTimer)>,
+) {
+    for (mut transform, enemy, mut timer) in query.iter_mut() {
+        timer.0.tick(time.delta());
+        if timer.0.finished() {
+            // Losowe zmienienie kierunku
+            let random_angle = random::<f32>() * 2.0 * std::f32::consts::PI;
+            transform.rotation = Quat::from_rotation_z(random_angle);
+            timer.0.reset();
+        }
+
+        // Poruszanie się w kierunku ustalonym przez rotację
+        let forward = transform.rotation * Vec3::Y;
+        transform.translation += forward * enemy.speed * time.delta_seconds();
+    }
 }
 
 fn player_setup(
@@ -408,7 +468,6 @@ fn player_setup(
         .insert(player_animations)
         .insert(AnimationState::default())
         .insert(Player)
-        .insert(Name::new("player"))
     ;
 }
 
