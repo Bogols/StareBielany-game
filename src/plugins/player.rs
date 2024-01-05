@@ -34,7 +34,7 @@ pub struct PlayerPlugin;
 impl Plugin for PlayerPlugin {
     fn build(&self, app: &mut App) {
         app.add_systems(Startup, player_setup)
-            .add_systems(Update, (player_movement, confine_player_movement))
+            .add_systems(Update, player_movement)
             .add_systems(Update, animate);
     }
 }
@@ -75,7 +75,11 @@ fn player_setup(
     commands
         .spawn(SpriteSheetBundle {
             texture_atlas: texture_atlas_handle,
-            transform: Transform::from_scale(Vec3::splat(10.0)),
+            transform: Transform::from_scale(Vec3 {
+                x: 0.7,
+                y: 0.7,
+                z: 5.0,
+            }),
             ..Default::default()
         })
         .insert(player_animations.idle.clone())
@@ -97,13 +101,7 @@ pub fn player_movement(
         With<Player>,
     >,
 ) {
-    println!("Player movement system entered"); // Confirm the system is running
-    let mut entity_count = 0;
-
     for (mut transform, mut state, mut animation, player_animations) in query.iter_mut() {
-        println!("Entity found, processing..."); // This should print for each matching entity
-        entity_count += 1;
-
         let mut direction = Vec3::ZERO;
         let mut current_animation = PlayerAnimation::Idle;
 
@@ -156,10 +154,8 @@ pub fn player_movement(
             *animation = new_animation.clone();
         }
 
-        println!("animation: {:?}", animation);
         state.update(&animation.0, time.delta());
     }
-    println!("Total entities processed: {}", entity_count); // How many entities were iterated over
 }
 
 pub fn confine_player_movement(
