@@ -39,7 +39,11 @@ struct CursorPosition(Vec2);
 #[derive(Component)]
 struct Bullet {
     velocity: Vec2,
+    lifetime: Timer
 }
+
+#[derive(Default, Resource)]
+struct BulletSpawnTimer(Timer);
 
 #[derive(Component)]
 pub struct Pickup;
@@ -83,6 +87,7 @@ impl Plugin for PlayerPlugin {
                 ..default()
             })
             .insert_resource(CursorPosition(Vec2::ZERO))
+            .insert_resource(BulletSpawnTimer(Timer::from_seconds(0.1, TimerMode::Repeating)))
             .add_plugins(RapierDebugRenderPlugin::default())
             .add_plugins(RapierPhysicsPlugin::<NoUserData>::pixels_per_meter(100.))
             .add_systems(Startup, player_setup)
@@ -95,12 +100,13 @@ impl Plugin for PlayerPlugin {
             .add_systems(Update, display_events)
             .add_systems(Update, print_entity_movement)
             .add_systems(Update, spawn_bullet_on_click)
+            .add_systems(Update, despawn_expired_bullets)
             .add_systems(Update, move_bullets)
         ;
     }
 }
 
-pub fn set_cursor_position(
+fn set_cursor_position(
     mut cursor_position: ResMut<CursorPosition>,
     window_query: Query<&Window, With<PrimaryWindow>>,
     camera_query: Query<(&Camera, &GlobalTransform), With<MainCamera>>,
@@ -122,7 +128,7 @@ fn display_events(
     mut enemy_query: Query<(Entity, &mut Enemy)>,
     wall_query: Query<Entity, With<Wall>>,
 ) {
-    for collision_event in collision_events.iter() {
+    for collision_event in collision_events.read() {
         match collision_event {
             CollisionEvent::Started(entity1, entity2, _) => {
                 handle_bullet_collision(
@@ -243,23 +249,40 @@ fn spawn_bullet_on_click(
     mut commands: Commands,
     mouse_button_input: Res<Input<MouseButton>>,
     cursor_position: Res<CursorPosition>,
-    mut query: Query<&Transform, With<Player>>,
+    query: Query<&Transform, With<Player>>,
+    mut bullet_spawn_timer: ResMut<BulletSpawnTimer>,
+    time: Res<Time>
 ) {
-    if mouse_button_input.just_pressed(MouseButton::Left) {
-        if let Ok(player_transform) = query.get_single_mut() {
-            let player_position = player_transform.translation.truncate();
-            let bullet_direction = cursor_position.0 - player_position; // Załóż, że masz `player_position`
-            let bullet_velocity = bullet_direction.normalize_or_zero() * 10000.0; // Przykładowa prędkość
-            // Obliczenie kąta rotacji
-            let bullet_angle = bullet_direction.y.atan2(bullet_direction.x) + std::f32::consts::FRAC_PI_2;
+    if mouse_button_input.pressed(MouseButton::Left) {
+        if bullet_spawn_timer.0.tick(time.delta()).just_finished() {
+            if let Ok(player_transform) = query.get_single() {
+                let player_position = player_transform.translation.truncate();
+                let bullet_direction = cursor_position.0 - player_position;
+                let bullet_velocity = bullet_direction.normalize_or_zero() * 10000.0;
+                let bullet_angle = bullet_direction.y.atan2(bullet_direction.x) + std::f32::consts::FRAC_PI_2;
 
-            commands.spawn(Collider::capsule_y(50., 15.))
-                .insert(LockedAxes::ROTATION_LOCKED)
-                .insert(Bullet { velocity: bullet_velocity })
-                .insert(TransformBundle::from(Transform::from_xyz(player_position.x, player_position.y, 0.)
-                    .with_rotation(Quat::from_rotation_z(bullet_angle))
-                ))
-            ;
+                commands.spawn(Collider::capsule_y(50., 15.))
+                    .insert(LockedAxes::ROTATION_LOCKED)
+                    .insert(Bullet {
+                        velocity: bullet_velocity,
+                        lifetime: Timer::from_seconds(0.5, TimerMode::Once)
+                    })
+                    .insert(TransformBundle::from(Transform::from_xyz(player_position.x, player_position.y, 0.)
+                        .with_rotation(Quat::from_rotation_z(bullet_angle))
+                    ));
+            }
+        }
+    }
+}
+
+fn despawn_expired_bullets(
+    time: Res<Time>,
+    mut commands: Commands,
+    mut query: Query<(Entity, &mut Bullet)>,
+) {
+    for (entity, mut bullet) in query.iter_mut() {
+        if bullet.lifetime.tick(time.delta()).finished() {
+            commands.entity(entity).despawn();
         }
     }
 }
