@@ -3,6 +3,7 @@ use bevy::{prelude::*, window::PrimaryWindow};
 use bevy_rapier2d::prelude::*;
 use rand::prelude::*;
 use bevy::ecs::system::ParamSet;
+use bevy_rapier2d::prelude::ColliderMassProperties::MassProperties;
 
 use crate::resources::constants::PLAYER_SPEED;
 use crate::setup::MainCamera;
@@ -69,6 +70,7 @@ impl Health {
 pub struct Enemy {
     health: Health,
     speed: f32,
+    player_spotted: bool
 }
 
 #[derive(Component)]
@@ -79,6 +81,7 @@ impl Enemy {
         Enemy {
             health: Health::new(max_health),
             speed,
+            player_spotted: false
         }
     }
 
@@ -360,11 +363,12 @@ fn spawn_enemy(
             .spawn((
                 RigidBody::Dynamic,
                 Collider::ball(250.),
+                ColliderMassProperties::Mass(100.),
                 TransformBundle::from(Transform::from_xyz(x, y, 0.)),
                 ActiveEvents::COLLISION_EVENTS
             ))
             .insert(Enemy::new(100, 1500.0))
-            .insert(EnemyTimer(Timer::from_seconds(1.0, TimerMode::Repeating)))
+            .insert(EnemyTimer(Timer::from_seconds(1.0, TimerMode::Once)))
         ;
     }
 }
@@ -373,7 +377,7 @@ fn chase_player(
     time: Res<Time>,
     mut query_set: ParamSet<(
         Query<&Transform, With<Player>>,
-        Query<(&Enemy, &mut Transform)>
+        Query<(&mut Enemy, &mut Transform)>
     )>,
 ) {
     // Najpierw zbieramy informacje o położeniu gracza
@@ -381,13 +385,16 @@ fn chase_player(
 
     // Następnie iterujemy przez przeciwników
     if let Ok(player_translation) = player_position {
-        for (enemy, mut enemy_transform) in query_set.p1().iter_mut() {
+        for (mut enemy, mut enemy_transform) in query_set.p1().iter_mut() {
             let direction_to_player = player_translation - enemy_transform.translation;
             let distance_to_player = direction_to_player.length();
 
             if distance_to_player < 5000.0 {
+                enemy.player_spotted = true;
                 let direction_normalized = direction_to_player.normalize_or_zero();
                 enemy_transform.translation += direction_normalized * time.delta_seconds() * enemy.speed;
+            } else {
+                enemy.player_spotted = false;
             }
         }
     }
@@ -398,6 +405,10 @@ fn move_enemies(
     mut query: Query<(&mut Transform, &Enemy, &mut EnemyTimer)>,
 ) {
     for (mut transform, enemy, mut timer) in query.iter_mut() {
+        if enemy.player_spotted == false {
+            return
+        }
+
         timer.0.tick(time.delta());
         if timer.0.finished() {
             // Losowe zmienienie kierunku
