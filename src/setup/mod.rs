@@ -1,5 +1,3 @@
-// use crate::helpers::map_loader::{load_map_from_json, Map};
-// use crate::resources::constants::{TEXTURE_PATH, TILE_MAP_PATH};
 use bevy::prelude::*;
 use bevy::window::PrimaryWindow;
 
@@ -10,7 +8,6 @@ pub fn setup(
     mut commands: Commands,
     asset_server: Res<AssetServer>,
     window_query: Query<&Window, With<PrimaryWindow>>,
-    // mut texture_atlases: ResMut<Assets<TextureAtlas>>,
 ) {
     let window = window_query.get_single().unwrap();
 
