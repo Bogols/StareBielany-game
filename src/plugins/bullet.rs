@@ -147,4 +147,3 @@ fn move_bullets(
         transform.translation += bullet.velocity.extend(0.0) * time.delta_seconds();
     }
 }
-
