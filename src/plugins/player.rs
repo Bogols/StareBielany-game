@@ -31,7 +31,7 @@ pub struct PlayerPlugin;
 
 impl Plugin for PlayerPlugin {
     fn build(&self, app: &mut App) {
-        app.add_systems(Startup, player_setup)
+        app.add_systems(PostStartup, player_setup)
             .add_systems(Update, player_movement)
             .add_systems(Update, animate)
             .add_systems(Update, listen_player_controller)
@@ -128,6 +128,11 @@ fn player_setup(
         })
         .insert(SpriteSheetBundle {
             texture_atlas: texture_atlas_handle,
+            transform: Transform::from_xyz(0.0, 0.0, 10.0).with_scale(Vec3 {
+                x: 1.5,
+                y: 1.5,
+                z: 0.,
+            }),
             ..Default::default()
         })
         .insert(player_animations.idle.clone())
