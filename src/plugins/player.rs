@@ -1,15 +1,13 @@
 use benimator::FrameRate;
-use bevy::{prelude::*, window::PrimaryWindow};
+use bevy::prelude::*;
 use bevy_rapier2d::prelude::*;
-use rand::prelude::*;
-use bevy::ecs::system::ParamSet;
-use bevy_rapier2d::prelude::ColliderMassProperties::MassProperties;
 
+use crate::components::bullet::Bullet;
+use crate::components::pickup::Pickup;
+use crate::components::player::Player;
+use crate::plugins::bullet::BulletSpawnTimer;
+use crate::plugins::cursor_position::CursorPosition;
 use crate::resources::constants::PLAYER_SPEED;
-use crate::setup::MainCamera;
-
-#[derive(Component)]
-pub struct Player;
 
 #[derive(Component, Deref, Clone, Debug)]
 pub struct Animation(pub benimator::Animation);
@@ -35,210 +33,21 @@ enum PlayerAnimation {
     RunningDown,
 }
 
-#[derive(Default, Resource)]
-struct CursorPosition(Vec2);
-
-#[derive(Component)]
-struct Bullet {
-    velocity: Vec2,
-    lifetime: Timer,
-}
-
-#[derive(Default, Resource)]
-struct BulletSpawnTimer(Timer);
-
-#[derive(Component)]
-pub struct Pickup;
-
-#[derive(Component)]
-pub struct Wall;
-
 pub struct PlayerPlugin;
-
-pub struct Health {
-    current: i32,
-    max: i32,
-}
-
-impl Health {
-    fn new(max: i32) -> Self {
-        Health { current: max, max }
-    }
-}
-
-#[derive(Component)]
-pub struct Enemy {
-    health: Health,
-    speed: f32,
-    player_spotted: bool
-}
-
-#[derive(Component)]
-struct EnemyTimer(Timer);
-
-impl Enemy {
-    fn new(max_health: i32, speed: f32) -> Self {
-        Enemy {
-            health: Health::new(max_health),
-            speed,
-            player_spotted: false
-        }
-    }
-
-    fn take_damage(&mut self, amount: i32) {
-        self.health.current = (self.health.current - amount).max(0);
-    }
-}
 
 impl Plugin for PlayerPlugin {
     fn build(&self, app: &mut App) {
         app
-            .insert_resource(RapierConfiguration {
-                gravity: Vec2::ZERO,
-                ..default()
-            })
-            .insert_resource(CursorPosition(Vec2::ZERO))
-            .insert_resource(BulletSpawnTimer(Timer::from_seconds(0.1, TimerMode::Repeating)))
-            .add_plugins(RapierDebugRenderPlugin::default())
-            .add_plugins(RapierPhysicsPlugin::<NoUserData>::pixels_per_meter(100.))
             .add_systems(Startup, player_setup)
-            .add_systems(Startup, spawn_enemy)
-            .add_systems(Startup, spawn_wall)
-            .add_systems(Startup, spawn_pickups)
-            .add_systems(Update, set_cursor_position)
             .add_systems(Update, player_movement)
             .add_systems(Update, animate)
-            .add_systems(Update, display_events)
-            .add_systems(Update, print_entity_movement)
-            .add_systems(Update, spawn_bullet_on_click)
-            .add_systems(Update, despawn_expired_bullets)
-            .add_systems(Update, move_bullets)
-            .add_systems(Update, move_enemies)
-            .add_systems(Update, chase_player)
+            .add_systems(Update, listen_player_controller)
+            .add_systems(Update, spawn_bullets_on_pressed)
         ;
     }
 }
 
-fn set_cursor_position(
-    mut cursor_position: ResMut<CursorPosition>,
-    window_query: Query<&Window, With<PrimaryWindow>>,
-    camera_query: Query<(&Camera, &GlobalTransform), With<MainCamera>>,
-) {
-    let (camera, camera_transform) = camera_query.single();
-    let window = window_query.single();
-
-    if let Some(world_position) = window.cursor_position()
-        .and_then(|cursor| camera.viewport_to_world(camera_transform, cursor))
-        .map(|ray| ray.origin.truncate()) {
-        cursor_position.0 = world_position;
-    }
-}
-
-fn display_events(
-    mut commands: Commands,
-    mut collision_events: EventReader<CollisionEvent>,
-    bullet_query: Query<Entity, With<Bullet>>,
-    mut enemy_query: Query<(Entity, &mut Enemy)>,
-    wall_query: Query<Entity, With<Wall>>,
-) {
-    for collision_event in collision_events.read() {
-        match collision_event {
-            CollisionEvent::Started(entity1, entity2, _) => {
-                handle_bullet_collision(
-                    &mut commands,
-                    entity1,
-                    entity2,
-                    &bullet_query,
-                    &mut enemy_query,
-                    &wall_query,
-                );
-            }
-            _ => {}
-        }
-
-        info!("Received collision event: {:?}", collision_event);
-    }
-}
-
-fn handle_bullet_collision(
-    commands: &mut Commands,
-    entity1: &Entity,
-    entity2: &Entity,
-    bullet_query: &Query<Entity, With<Bullet>>,
-    enemy_query: &mut Query<(Entity, &mut Enemy)>,
-    wall_query: &Query<Entity, With<Wall>>,
-) {
-    if let Ok(bullet_entity) = get_bullet_entity(entity1, entity2, bullet_query) {
-        if process_bullet_enemy_collision(bullet_entity, entity1, entity2, commands, enemy_query)
-            || process_bullet_wall_collision(bullet_entity, entity1, entity2, commands, wall_query) {
-            return;
-        }
-    }
-    info!("No relevant bullet collision detected.");
-}
-
-fn get_bullet_entity<'a>(
-    entity1: &'a Entity,
-    entity2: &'a Entity,
-    bullet_query: &'a Query<Entity, With<Bullet>>,
-) -> Result<&'a Entity, ()> {
-    if bullet_query.get(*entity1).is_ok() {
-        Ok(entity1)
-    } else if bullet_query.get(*entity2).is_ok() {
-        Ok(entity2)
-    } else {
-        Err(())
-    }
-}
-
-fn process_bullet_enemy_collision(
-    bullet_entity: &Entity,
-    entity1: &Entity,
-    entity2: &Entity,
-    commands: &mut Commands,
-    enemy_query: &mut Query<(Entity, &mut Enemy)>,
-) -> bool {
-    let (bullet, enemy) = if enemy_query.get_mut(*entity1).is_ok() {
-        (bullet_entity, entity1)
-    } else if enemy_query.get_mut(*entity2).is_ok() {
-        (bullet_entity, entity2)
-    } else {
-        return false;
-    };
-
-    // Odebranie obrażeń przez przeciwnika i usunięcie pocisku
-    if let Ok((enemy_entity, mut enemy)) = enemy_query.get_mut(*enemy) {
-        enemy.take_damage(10);
-        commands.entity(*bullet).despawn();
-        info!("Enemy hit! Remaining HP: {}", enemy.health.current);
-
-        if enemy.health.current == 0 {
-            commands.entity(enemy_entity).despawn();
-            info!("Enemy is dead.");
-        }
-        true
-    } else {
-        false
-    }
-}
-
-fn process_bullet_wall_collision(
-    bullet_entity: &Entity,
-    entity1: &Entity,
-    entity2: &Entity,
-    commands: &mut Commands,
-    wall_query: &Query<Entity, With<Wall>>,
-) -> bool {
-    if wall_query.get(*entity1).is_ok() || wall_query.get(*entity2).is_ok() {
-        commands.entity(*bullet_entity).despawn();
-        info!("Bullet despawned upon hitting a wall.");
-        true
-    } else {
-        false
-    }
-}
-
-fn print_entity_movement(
+fn listen_player_controller(
     controllers: Query<(Entity, &KinematicCharacterControllerOutput)>,
     mut commands: Commands,
     pickups: Query<&Pickup>,
@@ -257,7 +66,7 @@ fn print_entity_movement(
     }
 }
 
-fn spawn_bullet_on_click(
+fn spawn_bullets_on_pressed(
     mut commands: Commands,
     mouse_button_input: Res<Input<MouseButton>>,
     cursor_position: Res<CursorPosition>,
@@ -270,10 +79,10 @@ fn spawn_bullet_on_click(
             if let Ok(player_transform) = query.get_single() {
                 let player_position = player_transform.translation.truncate();
                 let bullet_direction = cursor_position.0 - player_position;
-                let bullet_velocity = bullet_direction.normalize_or_zero() * 10000.0;
+                let bullet_velocity = bullet_direction.normalize_or_zero() * 1000.0;
                 let bullet_angle = bullet_direction.y.atan2(bullet_direction.x) + std::f32::consts::FRAC_PI_2;
 
-                commands.spawn(Collider::capsule_y(50., 15.))
+                commands.spawn(Collider::capsule_y(5., 1.5))
                     .insert(LockedAxes::ROTATION_LOCKED)
                     .insert(Bullet {
                         velocity: bullet_velocity,
@@ -284,142 +93,6 @@ fn spawn_bullet_on_click(
                     ));
             }
         }
-    }
-}
-
-fn despawn_expired_bullets(
-    time: Res<Time>,
-    mut commands: Commands,
-    mut query: Query<(Entity, &mut Bullet)>,
-) {
-    for (entity, mut bullet) in query.iter_mut() {
-        if bullet.lifetime.tick(time.delta()).finished() {
-            commands.entity(entity).despawn();
-        }
-    }
-}
-
-fn move_bullets(
-    time: Res<Time>,
-    mut query: Query<(&mut Transform, &Bullet)>,
-) {
-    for (mut transform, bullet) in query.iter_mut() {
-        transform.translation += bullet.velocity.extend(0.0) * time.delta_seconds();
-    }
-}
-
-fn spawn_pickups(
-    mut commands: Commands
-) {
-    let mut rng = thread_rng(); // Generator liczb losowych
-
-    for _ in 0..10 {
-        let x = rng.gen_range(-2000.0..2500.0); // Losowa pozycja X
-        let y = rng.gen_range(-2000.0..2500.0); // Losowa pozycja Y
-
-        commands
-            .spawn((
-                Transform::from_xyz(x, y, 0.),
-                GlobalTransform::default(),
-            ))
-            .insert(Collider::capsule_y(200., 120.))
-            .insert(ActiveEvents::COLLISION_EVENTS)
-            .insert(Sensor)
-            .insert(Pickup)
-            .insert(Name::new("pickup"));
-    }
-}
-
-fn spawn_wall(
-    mut commands: Commands
-) {
-    /*
-    * @TODO: Wall a bit hacked by rapier collisions, but working properly?
-    *   It's not. Enemy has an ability to "walk" through the wall.
-    */
-    commands
-        .spawn((
-            TransformBundle::from(Transform::from_xyz(-1500., 100., 0.)),
-            Collider::cuboid(50., 1500.),
-            RigidBody::Dynamic,
-            ActiveEvents::COLLISION_EVENTS,
-            Sensor
-        ))
-        .insert(Wall)
-        .insert(Name::new("wall"))
-    ;
-}
-
-fn spawn_enemy(
-    mut commands: Commands
-) {
-    let mut rng = thread_rng(); // Generator liczb losowych
-
-    for _ in 0..10 {
-        let x = rng.gen_range(-2000.0..2500.0); // Losowa pozycja X
-        let y = rng.gen_range(-2000.0..2500.0); // Losowa pozycja Y
-
-        commands
-            .spawn((
-                RigidBody::Dynamic,
-                Collider::ball(250.),
-                ColliderMassProperties::Mass(100.),
-                TransformBundle::from(Transform::from_xyz(x, y, 0.)),
-                ActiveEvents::COLLISION_EVENTS
-            ))
-            .insert(Enemy::new(100, 1500.0))
-            .insert(EnemyTimer(Timer::from_seconds(1.0, TimerMode::Once)))
-        ;
-    }
-}
-
-fn chase_player(
-    time: Res<Time>,
-    mut query_set: ParamSet<(
-        Query<&Transform, With<Player>>,
-        Query<(&mut Enemy, &mut Transform)>
-    )>,
-) {
-    // Najpierw zbieramy informacje o położeniu gracza
-    let player_position = query_set.p0().get_single().map(|t| t.translation);
-
-    // Następnie iterujemy przez przeciwników
-    if let Ok(player_translation) = player_position {
-        for (mut enemy, mut enemy_transform) in query_set.p1().iter_mut() {
-            let direction_to_player = player_translation - enemy_transform.translation;
-            let distance_to_player = direction_to_player.length();
-
-            if distance_to_player < 5000.0 {
-                enemy.player_spotted = true;
-                let direction_normalized = direction_to_player.normalize_or_zero();
-                enemy_transform.translation += direction_normalized * time.delta_seconds() * enemy.speed;
-            } else {
-                enemy.player_spotted = false;
-            }
-        }
-    }
-}
-
-fn move_enemies(
-    time: Res<Time>,
-    mut query: Query<(&mut Transform, &Enemy, &mut EnemyTimer)>,
-) {
-    for (mut transform, enemy, mut timer) in query.iter_mut() {
-        if enemy.player_spotted == false {
-            return
-        }
-
-        timer.0.tick(time.delta());
-        if timer.0.finished() {
-            // Losowe zmienienie kierunku
-            let random_angle = random::<f32>() * 2.0 * std::f32::consts::PI;
-            transform.rotation = Quat::from_rotation_z(random_angle);
-            timer.0.reset();
-        }
-
-        // Poruszanie się w kierunku ustalonym przez rotację
-        let forward = transform.rotation * Vec3::Y;
-        transform.translation += forward * enemy.speed * time.delta_seconds();
     }
 }
 
@@ -472,7 +145,11 @@ fn player_setup(
         })
         .insert(SpriteSheetBundle {
             texture_atlas: texture_atlas_handle,
-            transform: Transform::from_scale(Vec3::splat(10.0)),
+            transform: Transform::from_scale(Vec3 {
+                x: 0.7,
+                y: 0.7,
+                z: 5.0,
+            }),
             ..Default::default()
         })
         .insert(player_animations.idle.clone())

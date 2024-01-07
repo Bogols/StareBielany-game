@@ -1,3 +1,15 @@
+use bevy::prelude::*;
+
+use plugins::physics::PhysicsPlugin;
+use plugins::pickup::PickupPlugin;
+use plugins::player::PlayerPlugin;
+use setup::camera::camera_setup;
+
+use crate::plugins::bullet::BulletPlugin;
+use crate::plugins::cursor_position::CursorPositionPlugin;
+use crate::plugins::enemy::EnemyPlugin;
+use crate::plugins::wall::WallPlugin;
+
 mod components;
 mod helpers;
 mod plugins;
@@ -5,15 +17,17 @@ mod resources;
 mod setup;
 mod systems;
 
-use bevy::prelude::*;
-use plugins::player::PlayerPlugin;
-use setup::setup;
-
 fn main() {
     App::new()
         .add_plugins(DefaultPlugins.set(ImagePlugin::default_nearest()))
-        .add_systems(Startup, setup)
+        .add_systems(Startup, camera_setup)
+        .add_plugins(PhysicsPlugin)
+        .add_plugins(CursorPositionPlugin)
         .add_plugins(PlayerPlugin)
+        .add_plugins(BulletPlugin)
+        .add_plugins(WallPlugin)
+        .add_plugins(EnemyPlugin)
+        .add_plugins(PickupPlugin)
         .add_systems(Update, camera_movement_system)
         // .add_systems(Update, print_camera_position)
         .run();
