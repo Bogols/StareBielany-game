@@ -18,32 +18,24 @@ pub struct AnimationState(pub benimator::State);
 #[derive(Component, Clone)]
 pub struct PlayerAnimations {
     idle: Animation,
-    running_right: Animation,
-    running_left: Animation,
-    running_down: Animation,
-    running_up: Animation,
+    running: Animation,
 }
 
 #[derive(Clone, Copy, Debug)]
 enum PlayerAnimation {
     Idle,
-    RunningLeft,
-    RunningRight,
-    RunningUp,
-    RunningDown,
+    Running,
 }
 
 pub struct PlayerPlugin;
 
 impl Plugin for PlayerPlugin {
     fn build(&self, app: &mut App) {
-        app
-            .add_systems(Startup, player_setup)
+        app.add_systems(Startup, player_setup)
             .add_systems(Update, player_movement)
             .add_systems(Update, animate)
             .add_systems(Update, listen_player_controller)
-            .add_systems(Update, spawn_bullets_on_pressed)
-        ;
+            .add_systems(Update, spawn_bullets_on_pressed);
     }
 }
 
@@ -80,16 +72,19 @@ fn spawn_bullets_on_pressed(
                 let player_position = player_transform.translation.truncate();
                 let bullet_direction = cursor_position.0 - player_position;
                 let bullet_velocity = bullet_direction.normalize_or_zero() * 1000.0;
-                let bullet_angle = bullet_direction.y.atan2(bullet_direction.x) + std::f32::consts::FRAC_PI_2;
+                let bullet_angle =
+                    bullet_direction.y.atan2(bullet_direction.x) + std::f32::consts::FRAC_PI_2;
 
-                commands.spawn(Collider::capsule_y(5., 1.5))
+                commands
+                    .spawn(Collider::capsule_y(5., 1.5))
                     .insert(LockedAxes::ROTATION_LOCKED)
                     .insert(Bullet {
                         velocity: bullet_velocity,
                         lifetime: Timer::from_seconds(1.0, TimerMode::Once),
                     })
-                    .insert(TransformBundle::from(Transform::from_xyz(player_position.x, player_position.y, 0.)
-                        .with_rotation(Quat::from_rotation_z(bullet_angle))
+                    .insert(TransformBundle::from(
+                        Transform::from_xyz(player_position.x, player_position.y, 0.)
+                            .with_rotation(Quat::from_rotation_z(bullet_angle)),
                     ));
             }
         }
@@ -101,9 +96,9 @@ fn player_setup(
     asset_server: Res<AssetServer>,
     mut textures: ResMut<Assets<TextureAtlas>>,
 ) {
-    let texture_handle = asset_server.load("wojtek-spritesheet.png");
+    let texture_handle = asset_server.load("wojtek-spritesheet-v2.png");
     let texture_atlas =
-        TextureAtlas::from_grid(texture_handle, Vec2::new(128.0, 128.0), 9, 5, None, None);
+        TextureAtlas::from_grid(texture_handle, Vec2::new(64.0, 64.0), 9, 2, None, None);
     let texture_atlas_handle = textures.add(texture_atlas);
 
     let player_animations = PlayerAnimations {
@@ -111,20 +106,8 @@ fn player_setup(
             0..=8,
             FrameRate::from_fps(10.0),
         )),
-        running_right: Animation(benimator::Animation::from_indices(
+        running: Animation(benimator::Animation::from_indices(
             9..=17,
-            FrameRate::from_fps(10.0),
-        )),
-        running_left: Animation(benimator::Animation::from_indices(
-            18..=26,
-            FrameRate::from_fps(10.0),
-        )),
-        running_down: Animation(benimator::Animation::from_indices(
-            27..=35,
-            FrameRate::from_fps(10.0),
-        )),
-        running_up: Animation(benimator::Animation::from_indices(
-            36..=44,
             FrameRate::from_fps(10.0),
         )),
     };
@@ -140,37 +123,24 @@ fn player_setup(
                     apply_impulse_to_dynamic_bodies: false,
                     ..default()
                 },
-                ActiveEvents::COLLISION_EVENTS
+                ActiveEvents::COLLISION_EVENTS,
             ));
         })
         .insert(SpriteSheetBundle {
             texture_atlas: texture_atlas_handle,
-            transform: Transform::from_scale(Vec3 {
-                x: 0.7,
-                y: 0.7,
-                z: 5.0,
-            }),
             ..Default::default()
         })
         .insert(player_animations.idle.clone())
         .insert(player_animations)
         .insert(AnimationState::default())
-        .insert(Player)
-    ;
+        .insert(Player);
 }
 
 pub fn player_movement(
     mut controllers: Query<&mut KinematicCharacterController>,
     keyboard_input: Res<Input<KeyCode>>,
     time: Res<Time>,
-    mut query: Query<
-        (
-            &mut AnimationState,
-            &mut Animation,
-            &PlayerAnimations,
-        ),
-        With<Player>,
-    >,
+    mut query: Query<(&mut AnimationState, &mut Animation, &PlayerAnimations), With<Player>>,
 ) {
     for mut controller in &mut controllers {
         for (mut state, mut animation, player_animations) in query.iter_mut() {
@@ -178,26 +148,10 @@ pub fn player_movement(
             let mut current_animation = PlayerAnimation::Idle;
 
             let directions = [
-                (
-                    KeyCode::W,
-                    Vec2::new(0.0, 1.0),
-                    PlayerAnimation::RunningUp,
-                ),
-                (
-                    KeyCode::A,
-                    Vec2::new(-1.0, 0.0),
-                    PlayerAnimation::RunningLeft,
-                ),
-                (
-                    KeyCode::S,
-                    Vec2::new(0.0, -1.0),
-                    PlayerAnimation::RunningDown,
-                ),
-                (
-                    KeyCode::D,
-                    Vec2::new(1.0, 0.0),
-                    PlayerAnimation::RunningRight,
-                ),
+                (KeyCode::W, Vec2::new(0.0, 1.0), PlayerAnimation::Running),
+                (KeyCode::A, Vec2::new(-1.0, 0.0), PlayerAnimation::Running),
+                (KeyCode::S, Vec2::new(0.0, -1.0), PlayerAnimation::Running),
+                (KeyCode::D, Vec2::new(1.0, 0.0), PlayerAnimation::Running),
             ];
 
             for (key, vec, anim) in directions.iter() {
@@ -216,10 +170,7 @@ pub fn player_movement(
 
             let new_animation = match current_animation {
                 PlayerAnimation::Idle => &player_animations.idle,
-                PlayerAnimation::RunningLeft => &player_animations.running_left,
-                PlayerAnimation::RunningRight => &player_animations.running_right,
-                PlayerAnimation::RunningUp => &player_animations.running_up,
-                PlayerAnimation::RunningDown => &player_animations.running_down,
+                PlayerAnimation::Running => &player_animations.running,
             };
 
             if animation.0 != new_animation.0 {
