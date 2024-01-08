@@ -1,6 +1,5 @@
 use benimator::FrameRate;
 use bevy::prelude::*;
-use bevy::sprite::Anchor::TopRight;
 use bevy_rapier2d::prelude::*;
 
 use crate::components::bullet::Bullet;
@@ -146,11 +145,20 @@ fn player_movement(
     mut controllers: Query<&mut KinematicCharacterController>,
     keyboard_input: Res<Input<KeyCode>>,
     time: Res<Time>,
-    mut player_query: Query<(&mut AnimationState, &mut Animation, &PlayerAnimations, &mut Transform, &mut TextureAtlasSprite), With<Player>>,
+    mut player_query: Query<
+        (
+            &mut AnimationState,
+            &mut Animation,
+            &PlayerAnimations,
+            &mut Transform,
+        ),
+        With<Player>,
+    >,
     cursor_position: Res<CursorPosition>,
 ) {
     for mut controller in &mut controllers {
-        for (mut state, mut animation, player_animations, mut transform, mut sprite) in player_query.iter_mut() {
+        for (mut state, mut animation, player_animations, mut transform) in player_query.iter_mut()
+        {
             let mut direction = Vec2::ZERO;
             let mut current_animation = PlayerAnimation::Idle;
 
