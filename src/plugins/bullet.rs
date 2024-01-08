@@ -1,6 +1,7 @@
 use bevy::app::{App, Update};
-use bevy::log::info;
-use bevy::prelude::{Commands, Entity, EventReader, Plugin, Query, Res, Resource, Time, Timer, Transform, With};
+use bevy::prelude::{
+    Commands, Entity, EventReader, Plugin, Query, Res, Resource, Time, Timer, Transform, With,
+};
 use bevy::time::TimerMode;
 use bevy_rapier2d::pipeline::CollisionEvent;
 
@@ -15,12 +16,13 @@ pub struct BulletPlugin;
 
 impl Plugin for BulletPlugin {
     fn build(&self, app: &mut App) {
-        app
-            .insert_resource(BulletSpawnTimer(Timer::from_seconds(0.1, TimerMode::Repeating)))
-            .add_systems(Update, destroy_expired_bullets)
-            .add_systems(Update, move_bullets)
-            .add_systems(Update, listen_collision_events)
-        ;
+        app.insert_resource(BulletSpawnTimer(Timer::from_seconds(
+            0.1,
+            TimerMode::Repeating,
+        )))
+        .add_systems(Update, destroy_expired_bullets)
+        .add_systems(Update, move_bullets)
+        .add_systems(Update, listen_collision_events);
     }
 }
 
@@ -45,8 +47,6 @@ fn listen_collision_events(
             }
             _ => {}
         }
-
-        // info!("Received collision event: {:?}", collision_event);
     }
 }
 
@@ -60,12 +60,11 @@ pub fn handle_bullet_collision(
 ) {
     if let Ok(bullet_entity) = get_bullet_entity(entity1, entity2, bullet_query) {
         if process_bullet_enemy_collision(bullet_entity, entity1, entity2, commands, enemy_query)
-            || process_bullet_wall_collision(bullet_entity, entity1, entity2, commands, wall_query) {
+            || process_bullet_wall_collision(bullet_entity, entity1, entity2, commands, wall_query)
+        {
             return;
         }
     }
-
-    // info!("No relevant bullet collision detected.");
 }
 
 fn get_bullet_entity<'a>(
@@ -100,11 +99,9 @@ fn process_bullet_enemy_collision(
     if let Ok((enemy_entity, mut enemy)) = enemy_query.get_mut(*enemy) {
         enemy.take_damage(10);
         commands.entity(*bullet).despawn();
-        // info!("Enemy hit! Remaining HP: {}", enemy.health.current);
 
         if enemy.health.current == 0 {
             commands.entity(enemy_entity).despawn();
-            // info!("Enemy is dead.");
         }
         true
     } else {
@@ -121,7 +118,6 @@ fn process_bullet_wall_collision(
 ) -> bool {
     if wall_query.get(*entity1).is_ok() || wall_query.get(*entity2).is_ok() {
         commands.entity(*bullet_entity).despawn();
-        // info!("Bullet despawned upon hitting a wall.");
         true
     } else {
         false
@@ -140,10 +136,7 @@ fn destroy_expired_bullets(
     }
 }
 
-fn move_bullets(
-    time: Res<Time>,
-    mut query: Query<(&mut Transform, &Bullet)>,
-) {
+fn move_bullets(time: Res<Time>, mut query: Query<(&mut Transform, &Bullet)>) {
     for (mut transform, bullet) in query.iter_mut() {
         transform.translation += bullet.velocity.extend(0.0) * time.delta_seconds();
     }
