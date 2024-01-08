@@ -8,6 +8,7 @@ use crate::components::player::Player;
 use crate::plugins::bullet::BulletSpawnTimer;
 use crate::plugins::cursor_position::CursorPosition;
 use crate::resources::constants::PLAYER_SPEED;
+use crate::setup::camera::MainCamera;
 
 #[derive(Component, Deref, Clone, Debug)]
 pub struct Animation(pub benimator::Animation);
@@ -35,6 +36,7 @@ impl Plugin for PlayerPlugin {
             .add_systems(Update, player_movement)
             .add_systems(Update, animate)
             .add_systems(Update, listen_player_controller)
+            .add_systems(Update, pin_camera_to_player)
             .add_systems(Update, spawn_bullets_on_pressed);
     }
 }
@@ -191,8 +193,6 @@ fn player_movement(
             let player_direction_vec = cursor_position.0 - player_position_vec;
             let angle = player_direction_vec.y.atan2(player_direction_vec.x) + std::f32::consts::PI;
 
-            info!(angle);
-
             transform.rotation = Quat::from_rotation_z(angle - std::f32::consts::FRAC_PI_2);
 
             state.update(&animation.0, time.delta());
@@ -207,5 +207,20 @@ fn animate(
         player.update(&animation.0, time.delta());
 
         texture.index = player.frame_index();
+    }
+}
+
+fn pin_camera_to_player(
+    mut camera_query: Query<&mut Transform, (With<MainCamera>, Without<Player>)>,
+    player_query: Query<&Transform, (With<Player>, Without<MainCamera>)>,
+) {
+    let camera_transform = camera_query.get_single_mut();
+    let player_transform = player_query.get_single();
+
+    if let Ok(player_transform) = player_transform {
+        if let Ok(mut camera_transform) = camera_transform {
+            camera_transform.translation.x = player_transform.translation.x;
+            camera_transform.translation.y = player_transform.translation.y;
+        }
     }
 }
