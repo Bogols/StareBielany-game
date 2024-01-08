@@ -44,13 +44,12 @@ fn listen_player_controller(
     mut commands: Commands,
     pickups: Query<&Pickup>,
 ) {
-    for (entity, output) in controllers.iter() {
+    for (_entity, output) in controllers.iter() {
         if !output.collisions.is_empty() {
             for collision in &output.collisions {
                 let collided_entity = collision.entity;
 
                 if pickups.get(collided_entity).is_ok() {
-                    // info!("Entity {:?} collided with a Pickup", entity);
                     commands.entity(collided_entity).despawn();
                 }
             }
@@ -96,9 +95,9 @@ fn player_setup(
     asset_server: Res<AssetServer>,
     mut textures: ResMut<Assets<TextureAtlas>>,
 ) {
-    let texture_handle = asset_server.load("wojtek-spritesheet-v2.png");
+    let texture_handle = asset_server.load("wojtek-spritesheet-v3.png");
     let texture_atlas =
-        TextureAtlas::from_grid(texture_handle, Vec2::new(64.0, 64.0), 9, 2, None, None);
+        TextureAtlas::from_grid(texture_handle, Vec2::new(96.0, 96.0), 9, 2, None, None);
     let texture_atlas_handle = textures.add(texture_atlas);
 
     let player_animations = PlayerAnimations {
@@ -128,11 +127,7 @@ fn player_setup(
         })
         .insert(SpriteSheetBundle {
             texture_atlas: texture_atlas_handle,
-            transform: Transform::from_xyz(0.0, 0.0, 10.0).with_scale(Vec3 {
-                x: 1.5,
-                y: 1.5,
-                z: 0.,
-            }),
+            transform: Transform::from_xyz(0.0, 0.0, 10.0),
             ..Default::default()
         })
         .insert(player_animations.idle.clone())
@@ -194,22 +189,21 @@ fn player_movement(
 
             let player_position_vec = transform.translation.truncate();
             let player_direction_vec = cursor_position.0 - player_position_vec;
-            let angle = (player_direction_vec.y.atan2(player_direction_vec.x)) + std::f32::consts::FRAC_PI_2;
+            let angle = player_direction_vec.y.atan2(player_direction_vec.x) + std::f32::consts::PI;
 
             info!(angle);
 
-            transform.rotate_z(angle);
+            transform.rotation = Quat::from_rotation_z(angle - std::f32::consts::FRAC_PI_2);
 
             state.update(&animation.0, time.delta());
         }
     }
 }
-
 fn animate(
     time: Res<Time>,
-    mut query: Query<(&mut AnimationState, &mut TextureAtlasSprite, &Animation, &mut Transform)>,
+    mut query: Query<(&mut AnimationState, &mut TextureAtlasSprite, &Animation)>,
 ) {
-    for (mut player, mut texture, animation, mut transform) in query.iter_mut() {
+    for (mut player, mut texture, animation) in query.iter_mut() {
         player.update(&animation.0, time.delta());
 
         texture.index = player.frame_index();
