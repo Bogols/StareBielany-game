@@ -1,5 +1,6 @@
 use benimator::FrameRate;
 use bevy::prelude::*;
+use bevy::sprite::Anchor::TopRight;
 use bevy_rapier2d::prelude::*;
 
 use crate::components::bullet::Bullet;
@@ -50,7 +51,7 @@ fn listen_player_controller(
                 let collided_entity = collision.entity;
 
                 if pickups.get(collided_entity).is_ok() {
-                    info!("Entity {:?} collided with a Pickup", entity);
+                    // info!("Entity {:?} collided with a Pickup", entity);
                     commands.entity(collided_entity).despawn();
                 }
             }
@@ -116,8 +117,8 @@ fn player_setup(
         .spawn(RigidBody::KinematicPositionBased)
         .with_children(|children| {
             children.spawn((
-                Collider::cuboid(20., 10.),
-                TransformBundle::from(Transform::from_xyz(0.0, -60.0, 0.0)),
+                Collider::ball(20.),
+                TransformBundle::from(Transform::from_xyz(0., 0., 0.)),
                 Ccd::enabled(),
                 KinematicCharacterController {
                     apply_impulse_to_dynamic_bodies: false,
@@ -141,14 +142,15 @@ fn player_setup(
         .insert(Player);
 }
 
-pub fn player_movement(
+fn player_movement(
     mut controllers: Query<&mut KinematicCharacterController>,
     keyboard_input: Res<Input<KeyCode>>,
     time: Res<Time>,
-    mut query: Query<(&mut AnimationState, &mut Animation, &PlayerAnimations), With<Player>>,
+    mut player_query: Query<(&mut AnimationState, &mut Animation, &PlayerAnimations, &mut Transform, &mut TextureAtlasSprite), With<Player>>,
+    cursor_position: Res<CursorPosition>,
 ) {
     for mut controller in &mut controllers {
-        for (mut state, mut animation, player_animations) in query.iter_mut() {
+        for (mut state, mut animation, player_animations, mut transform, mut sprite) in player_query.iter_mut() {
             let mut direction = Vec2::ZERO;
             let mut current_animation = PlayerAnimation::Idle;
 
@@ -182,6 +184,14 @@ pub fn player_movement(
                 *animation = new_animation.clone();
             }
 
+            let player_position_vec = transform.translation.truncate();
+            let player_direction_vec = cursor_position.0 - player_position_vec;
+            let angle = (player_direction_vec.y.atan2(player_direction_vec.x)) + std::f32::consts::FRAC_PI_2;
+
+            info!(angle);
+
+            transform.rotate_z(angle);
+
             state.update(&animation.0, time.delta());
         }
     }
@@ -189,9 +199,9 @@ pub fn player_movement(
 
 fn animate(
     time: Res<Time>,
-    mut query: Query<(&mut AnimationState, &mut TextureAtlasSprite, &Animation)>,
+    mut query: Query<(&mut AnimationState, &mut TextureAtlasSprite, &Animation, &mut Transform)>,
 ) {
-    for (mut player, mut texture, animation) in query.iter_mut() {
+    for (mut player, mut texture, animation, mut transform) in query.iter_mut() {
         player.update(&animation.0, time.delta());
 
         texture.index = player.frame_index();

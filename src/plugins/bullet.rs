@@ -46,7 +46,7 @@ fn listen_collision_events(
             _ => {}
         }
 
-        info!("Received collision event: {:?}", collision_event);
+        // info!("Received collision event: {:?}", collision_event);
     }
 }
 
@@ -64,7 +64,8 @@ pub fn handle_bullet_collision(
             return;
         }
     }
-    info!("No relevant bullet collision detected.");
+
+    // info!("No relevant bullet collision detected.");
 }
 
 fn get_bullet_entity<'a>(
@@ -99,11 +100,11 @@ fn process_bullet_enemy_collision(
     if let Ok((enemy_entity, mut enemy)) = enemy_query.get_mut(*enemy) {
         enemy.take_damage(10);
         commands.entity(*bullet).despawn();
-        info!("Enemy hit! Remaining HP: {}", enemy.health.current);
+        // info!("Enemy hit! Remaining HP: {}", enemy.health.current);
 
         if enemy.health.current == 0 {
             commands.entity(enemy_entity).despawn();
-            info!("Enemy is dead.");
+            // info!("Enemy is dead.");
         }
         true
     } else {
@@ -120,7 +121,7 @@ fn process_bullet_wall_collision(
 ) -> bool {
     if wall_query.get(*entity1).is_ok() || wall_query.get(*entity2).is_ok() {
         commands.entity(*bullet_entity).despawn();
-        info!("Bullet despawned upon hitting a wall.");
+        // info!("Bullet despawned upon hitting a wall.");
         true
     } else {
         false
